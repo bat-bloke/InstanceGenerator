@@ -30,8 +30,8 @@
 		</dependency>
 		<dependency>
 			<groupId>com.graphhopper</groupId>
-			<artifactId>graphhopper-web</artifactId>
-			<version>1.0-pre25</version>
+			<artifactId>graphhopper-core</artifactId>
+			<version>5.0</version>
 		</dependency>
 		<dependency>
 		<groupId>net.sf.geographiclib</groupId>

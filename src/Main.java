@@ -2,7 +2,9 @@ import java.awt.geom.Point2D;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
@@ -54,11 +56,15 @@ public class Main {
 		ArrayList<Surgery> instance = selectSites();
 
 		//generate matrices & write
-		Matrix.getMatrices(instance, 100, filePath, filePath + "//output//" + instance.size());
+		Matrix.getMatrices(instance, 100, filePath, filePath + "//output//" + instance.size(), 9);
 
 		//write case to file
-
-		//return list of surgeries
+		try {
+			writeToFile(instance, filePath + "//output//" + instance.size());
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 	}
 
@@ -106,7 +112,7 @@ public class Main {
 		Collections.shuffle(shuffled, rand);
 
 		ArrayList<Surgery> toUse = new ArrayList<Surgery>();
-		toUse.add(target);
+		//toUse.add(target);
 		toUse.addAll(shuffled.subList(0, n));
 		return toUse;
 	}
@@ -124,62 +130,39 @@ public class Main {
 			shuffled.get(i).disableDrone();
 		}
 	}
-	/*
-	private void writeToFile(ArrayList<Surgery> chosen) {
-	
+
+	private static void writeToFile(ArrayList<Surgery> chosen, String path) throws IOException {
+
+		FileWriter write = new FileWriter(path + "-summary.txt", false);
+		PrintWriter printLine = new PrintWriter(write);
+
+		printLine.print("\t");
+
 		String t = "\t";
-		Mode van = InputExcelReader.MODES.getVan();
-		Mode bike = InputExcelReader.MODES.getBike();
-		Mode drone = InputExcelReader.MODES.getMode("drone");
-		ArrayList<Surgery> cVanBasedAt = null;//TODO CHANGE TO LIST OF POTENTIAL BASED AT SITES
-	
-		String line1 = "Input Size:";
-		String line2 = String.valueOf(toVisit.size());
-		String line3 = "Instance Size:";
-		String line4 = String.valueOf(n);
-	
-		String line6 = "Site/Postcode"+t+"Lat"+t+"Lon"+t+"Van"+t+"Bike"+t+"Drone"+t+"C-Van Base";
-		String line7 = "Mean/Target"+t+target.getCoord().getY()+t+target.getCoord().getX()+t+1+t+1+t+1+t+0;
-		for(Surgery s: chosen) {
+		printLine.print("Input Size:");
+		printLine.print("\n");
+		printLine.print(String.valueOf(toVisit.size()));
+		printLine.print("\n");
+		printLine.print("Instance Size:");
+		printLine.print("\n");
+		printLine.print(String.valueOf(n));
+		printLine.print("\n");
+
+		printLine.print("\n");
+		printLine.print(
+				"Site/Postcode" + t + "Lat" + t + "Lon" + t + "Van" + t + "Bike" + t + "Drone" + t + "C-Van Base");
+		printLine.print("Mean/Target" + t + target.getCoord().getY() + t + target.getCoord().getX() + t + 1 + t + 1 + t
+				+ 1 + t + 0);
+		for (Surgery s : chosen) {
 			int vanFlag = s.getPermittedModes()[0];
 			int bikeFlag = s.getPermittedModes()[1];
 			int droneFlag = s.getPermittedModes()[2];
 			int consolBaseFlag = s.getPermittedModes()[3];
-			String line = s.getPostcode()+t+s.getCoord().getY()+t+s.getCoord().getX()+t+vanFlag+t+bikeFlag+t+droneFlag+t+consolBaseFlag;
+			printLine.print(s.getPostcode() + t + s.getCoord().getY() + t + s.getCoord().getX() + t + vanFlag + t
+					+ bikeFlag + t + droneFlag + t + consolBaseFlag);
+			printLine.print("\n");
 		}
-	
-		String lineX = "Time Matrix"+TIME?;
-		PRINT MATRICES;
-		(DIST AND TIME)
+
+		printLine.close();
 	}
-	
-		private void assignConsolVanBasedAt() {
-	
-		}
-	
-		HashMap<LocalDateTime, HashMap<Pair<Surgery, Surgery>, HashMap<String, Double>>> timeODMatrix
-	
-		//take the imports from the eDrone solvers
-		public synchronized void setODParams(Surgery orig, Surgery dest, int m, HashMap<String, Object> params) {
-	
-			Mode mode = InputExcelReader.MODES.getMode(m);
-			if (!RouteDistance.externalPair.containsKey(mode.getGHProfile())) {
-				RouteDistance.externalPair.put(mode.getGHProfile(), new ArrayList<Pair<Surgery, Surgery>>());
-			}
-	
-			Pair<Surgery, Surgery> od = new Pair<Surgery, Surgery>(orig, dest);
-			if (params != null) {
-				od.assignExtParams(params);
-				RouteDistance.externalPair.get(mode.getGHProfile()).add(od);
-			} else {
-				//update existing OD pair with trajectory data
-				Pair<Surgery, Surgery> odCurrent = RouteDistance.externalPair.get(mode.getGHProfile())
-						.get(RouteDistance.externalPair.get(mode.getGHProfile()).indexOf(od));
-				odCurrent.assignTraj(traj);
-	
-			}
-		}
-	
-	
-	 */
 }

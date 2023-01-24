@@ -2,6 +2,7 @@
 *.class
 /target/routing/
 /target/input/
+/target/output/
 
 # Log file
 *.log
