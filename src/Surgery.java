@@ -23,7 +23,6 @@ public class Surgery {
 	// Assigns co-ordinate to the surgery
 	public void assignPosition(Point2D.Double coord) {
 		this.coordinates = coord;
-		double[] coords = { coord.getX(), coord.getY() };
 	}
 
 	// Getter for site name
@@ -70,5 +69,9 @@ public class Surgery {
 
 	public void disableDrone() {
 		this.modesPermitted[2] = 0;
+	}
+
+	public void enableCVan() {
+		this.modesPermitted[3] = 1;
 	}
 }

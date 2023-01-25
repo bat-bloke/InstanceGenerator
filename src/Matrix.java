@@ -2,6 +2,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Random;
 
 import com.graphhopper.GHRequest;
@@ -20,8 +21,8 @@ import net.sf.geographiclib.GeodesicMask;
 
 public class Matrix {
 
-	public static void getMatrices(ArrayList<Surgery> sites, double droneSpeed, String filePath, String runID,
-			int startHour) {
+	public static void getMatrices(ArrayList<Surgery> sites, double droneSpeed, double circMean, double circSDev,
+			String filePath, String runID, int startHour, double[] trafficMean, double[] trafficSDev) {
 
 		Random rand = new Random();
 		//path = filePath;
@@ -36,10 +37,13 @@ public class Matrix {
 				.setProfiles(new Profile("vehicle").setVehicle("car").setWeighting("fastest").setTurnCosts(true))
 				.setMinNetworkSize(200).importOrLoad();
 
+		HashMap<Surgery, HashMap<Surgery, ResponsePath>> vanRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
+		HashMap<Surgery, HashMap<Surgery, ResponsePath>> bikeRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
+
 		for (int hr = startHour; hr < startHour + 4; hr++) {
+
 			//https://www.gov.uk/government/statistical-data-sets/road-traffic-statistics-tra#annual-daily-traffic-flow-and-distribution-tra03
 			//tra0307
-
 			//xx.get(orig).get(dest)
 			ArrayList<ArrayList<Double>> vanTimes = new ArrayList<ArrayList<Double>>();
 			ArrayList<ArrayList<Double>> vanDists = new ArrayList<ArrayList<Double>>();
@@ -67,27 +71,53 @@ public class Matrix {
 						dt.add(0.0);
 						dd.add(0.0);
 					} else {
-						ResponsePath van = getGH(orig, dest, graphHopperCar, "car");
-						ResponsePath bike = getGH(orig, dest, graphHopperBike, "racingbike");
+						ResponsePath van = null;
+						if (!vanRPs.containsKey(orig)) {
+							vanRPs.put(orig, new HashMap<Surgery, ResponsePath>());
+						}
+						HashMap<Surgery, ResponsePath> rpVan = vanRPs.get(orig);
+						if (rpVan.containsKey(dest)) {
+							van = rpVan.get(dest);
+						} else {
+							van = getGH(orig, dest, graphHopperCar, "car");
+							rpVan.put(dest, van);
+						}
+
+						ResponsePath bike = null;
+						if (!vanRPs.containsKey(orig)) {
+							vanRPs.put(orig, new HashMap<Surgery, ResponsePath>());
+						}
+						HashMap<Surgery, ResponsePath> rpBike = vanRPs.get(orig);
+						if (rpBike.containsKey(dest)) {
+							bike = rpBike.get(dest);
+						} else {
+							bike = getGH(orig, dest, graphHopperBike, "racingbike");
+							rpBike.put(dest, van);
+						}
+
 						double vanDist = -1;
 						double vanTime = -1;
 						double bikeDist = -1;
 						double bikeTime = -1;
 						double droneDist = -1;
 						double droneTime = -1;
-						if (permitOrig[0] == 1 && permitDest[0] == 1) {
+						if ((permitOrig[0] == 1 || orig.equals(sites.get(0)))
+								&& (permitDest[0] == 1 || dest.equals(sites.get(0)))) {
 							vanDist = van.getDistance() / 1000.0;//in km
 							vanTime = van.getTime() / 60000.0;//in mins
-							//double trafficFudge = hr*distrib correctFactor //varied with time of day, constant for all sites
-							//vanTime = vanTime + trafficFudge;
+							//penalty varied with time of day, and by site
+							double trafficPenaltyFactor = rand.nextGaussian() * trafficSDev[hr] + trafficMean[hr];
+							vanTime = vanTime + vanTime * trafficPenaltyFactor;
 						}
-						if (permitOrig[1] == 1 && permitDest[1] == 1) {
+						if ((permitOrig[1] == 1 || orig.equals(sites.get(0)))
+								&& (permitDest[1] == 1 || dest.equals(sites.get(0)))) {
 							bikeDist = bike.getDistance() / 1000.0;//in km
 							bikeTime = bike.getTime() / 60000.0;//in mins
 						}
-						if (permitOrig[2] == 1 && permitDest[2] == 1) {
+						if ((permitOrig[2] == 1 || orig.equals(sites.get(0)))
+								&& (permitDest[2] == 1 || dest.equals(sites.get(0)))) {
 							droneDist = geoDesDistance(orig, dest);//varies with time of day (assumed random)
-							double droneCirc = rand.nextGaussian() * 0.1 + 1.566;
+							double droneCirc = rand.nextGaussian() * circSDev + circMean;
 							droneDist = droneDist * droneCirc;
 							droneTime = droneDist / (droneSpeed / 60);
 						}
@@ -107,13 +137,18 @@ public class Matrix {
 				droneDists.add(dd);
 			}
 
+			String zero = "";
+			if (hr < 10) {
+				zero = "0";
+			}
+
 			try {
-				writeMatrixToFile(vanTimes, sites, runID + "-" + hr + "00hr" + "-vanTimes");
-				writeMatrixToFile(vanDists, sites, runID + "-" + hr + "00hr" + "-vanDists");
-				writeMatrixToFile(bikeTimes, sites, runID + "-" + hr + "00hr" + "-bikeTimes");
-				writeMatrixToFile(bikeDists, sites, runID + "-" + hr + "00hr" + "-bikeDists");
-				writeMatrixToFile(droneTimes, sites, runID + "-" + hr + "00hr" + "-droneTimes");
-				writeMatrixToFile(droneDists, sites, runID + "-" + hr + "00hr" + "-droneDists");
+				writeMatrixToFile(vanTimes, sites, runID + "//" + zero + hr + "00hr" + "-vanTimes");
+				writeMatrixToFile(vanDists, sites, runID + "//" + zero + hr + "00hr" + "-vanDists");
+				writeMatrixToFile(bikeTimes, sites, runID + "//" + zero + hr + "00hr" + "-bikeTimes");
+				writeMatrixToFile(bikeDists, sites, runID + "//" + zero + hr + "00hr" + "-bikeDists");
+				writeMatrixToFile(droneTimes, sites, runID + "//" + zero + hr + "00hr" + "-droneTimes");
+				writeMatrixToFile(droneDists, sites, runID + "//" + zero + hr + "00hr" + "-droneDists");
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -121,16 +156,11 @@ public class Matrix {
 		}
 	}
 
-	/*
-	 * returns bike distance between locations
-	 */
 	private static ResponsePath getGH(Surgery a, Surgery b, GraphHopper gh, String profile) {
 
 		GHRequest request = new GHRequest(a.getCoord().getY(), a.getCoord().getX(), b.getCoord().getY(),
 				b.getCoord().getX()).setProfile("vehicle");
-
 		GHResponse route = gh.route(request);
-
 		return route.getBest();
 	}
 
@@ -140,7 +170,6 @@ public class Matrix {
 
 		FileWriter write = new FileWriter(path + ".txt", false);
 		PrintWriter printLine = new PrintWriter(write);
-
 		printLine.print("\t");
 		for (Surgery s : sites) {
 			printLine.print(s.getCoord().getY() + "," + s.getCoord().getX());
