@@ -21,6 +21,9 @@ import net.sf.geographiclib.GeodesicMask;
 
 public class Matrix {
 
+	private static HashMap<Surgery, HashMap<Surgery, ResponsePath>> vanRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
+	private static HashMap<Surgery, HashMap<Surgery, ResponsePath>> bikeRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
+
 	public static void getMatrices(ArrayList<Surgery> sites, double droneSpeed, double circMean, double circSDev,
 			String filePath, String runID, int startHour, double[] trafficMean, double[] trafficSDev) {
 
@@ -36,9 +39,6 @@ public class Matrix {
 		GraphHopper graphHopperCar = new GraphHopper().setGraphHopperLocation(carLocation).setOSMFile(mapSource)
 				.setProfiles(new Profile("vehicle").setVehicle("car").setWeighting("fastest").setTurnCosts(true))
 				.setMinNetworkSize(200).importOrLoad();
-
-		HashMap<Surgery, HashMap<Surgery, ResponsePath>> vanRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
-		HashMap<Surgery, HashMap<Surgery, ResponsePath>> bikeRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
 
 		for (int hr = startHour; hr < startHour + 4; hr++) {
 
@@ -60,7 +60,12 @@ public class Matrix {
 				ArrayList<Double> bd = new ArrayList<Double>();
 				ArrayList<Double> dt = new ArrayList<Double>();
 				ArrayList<Double> dd = new ArrayList<Double>();
-
+				if (!vanRPs.containsKey(orig)) {
+					vanRPs.put(orig, new HashMap<Surgery, ResponsePath>());
+				}
+				if (!bikeRPs.containsKey(orig)) {
+					bikeRPs.put(orig, new HashMap<Surgery, ResponsePath>());
+				}
 				for (Surgery dest : sites) {
 					int[] permitDest = dest.getPermittedModes();
 					if (orig.equals(dest)) {
@@ -72,9 +77,6 @@ public class Matrix {
 						dd.add(0.0);
 					} else {
 						ResponsePath van = null;
-						if (!vanRPs.containsKey(orig)) {
-							vanRPs.put(orig, new HashMap<Surgery, ResponsePath>());
-						}
 						HashMap<Surgery, ResponsePath> rpVan = vanRPs.get(orig);
 						if (rpVan.containsKey(dest)) {
 							van = rpVan.get(dest);
@@ -84,10 +86,7 @@ public class Matrix {
 						}
 
 						ResponsePath bike = null;
-						if (!vanRPs.containsKey(orig)) {
-							vanRPs.put(orig, new HashMap<Surgery, ResponsePath>());
-						}
-						HashMap<Surgery, ResponsePath> rpBike = vanRPs.get(orig);
+						HashMap<Surgery, ResponsePath> rpBike = bikeRPs.get(orig);
 						if (rpBike.containsKey(dest)) {
 							bike = rpBike.get(dest);
 						} else {
