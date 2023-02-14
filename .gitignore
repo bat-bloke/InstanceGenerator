@@ -3,6 +3,8 @@
 /target/routing/
 /target/input/
 /target/output/
+.vscode/*
+.settings/*
 
 # Log file
 *.log

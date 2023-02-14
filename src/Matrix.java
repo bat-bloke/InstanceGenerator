@@ -2,8 +2,11 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Random;
+
+import org.apache.commons.math.util.MathUtils;
 
 import com.graphhopper.GHRequest;
 import com.graphhopper.GHResponse;
@@ -23,139 +26,158 @@ public class Matrix {
 
 	private static HashMap<Surgery, HashMap<Surgery, ResponsePath>> vanRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
 	private static HashMap<Surgery, HashMap<Surgery, ResponsePath>> bikeRPs = new HashMap<Surgery, HashMap<Surgery, ResponsePath>>();
+	private static GraphHopper graphHopperBike;
+	private static GraphHopper graphHopperCar;
+	private static boolean store = false;
 
-	public static void getMatrices(ArrayList<Surgery> sites, double droneSpeed, double circMean, double circSDev,
-			String filePath, String runID, int startHour, double[] trafficMean, double[] trafficSDev) {
-
-		Random rand = new Random();
-		//path = filePath;
+	public static void setUpGH(String filePath) {
 		String mapSource = filePath + "//routing//map.osm.pbf";
 		String carLocation = filePath + "//routing//car";
 		String bikeLocation = filePath + "//routing//racingbike";
 
-		GraphHopper graphHopperBike = new GraphHopper().setGraphHopperLocation(bikeLocation).setOSMFile(mapSource)
+		graphHopperBike = new GraphHopper().setGraphHopperLocation(bikeLocation).setOSMFile(mapSource)
 				.setProfiles(new Profile("vehicle").setVehicle("racingbike").setWeighting("fastest").setTurnCosts(true))
-				.setMinNetworkSize(200).importOrLoad();
-		GraphHopper graphHopperCar = new GraphHopper().setGraphHopperLocation(carLocation).setOSMFile(mapSource)
+				.setMinNetworkSize(200)
+				.importOrLoad();
+		graphHopperCar = new GraphHopper().setGraphHopperLocation(carLocation).setOSMFile(mapSource)
 				.setProfiles(new Profile("vehicle").setVehicle("car").setWeighting("fastest").setTurnCosts(true))
-				.setMinNetworkSize(200).importOrLoad();
+				.setMinNetworkSize(200)
+				.importOrLoad();
+	}
 
-		for (int hr = startHour; hr < startHour + 4; hr++) {
+	public static void getMatrices(ArrayList<Surgery> sites, double droneSpeed, double circMean, double circSDev,
+			String runID, int startHour, double[] trafficMean, double[] trafficSDev) {
 
-			//https://www.gov.uk/government/statistical-data-sets/road-traffic-statistics-tra#annual-daily-traffic-flow-and-distribution-tra03
-			//tra0307
-			//xx.get(orig).get(dest)
-			ArrayList<ArrayList<Double>> vanTimes = new ArrayList<ArrayList<Double>>();
-			ArrayList<ArrayList<Double>> vanDists = new ArrayList<ArrayList<Double>>();
-			ArrayList<ArrayList<Double>> bikeTimes = new ArrayList<ArrayList<Double>>();
-			ArrayList<ArrayList<Double>> bikeDists = new ArrayList<ArrayList<Double>>();
-			ArrayList<ArrayList<Double>> droneTimes = new ArrayList<ArrayList<Double>>();
-			ArrayList<ArrayList<Double>> droneDists = new ArrayList<ArrayList<Double>>();
+		Random rand = new Random();
+		// path = filePath;
 
-			for (Surgery orig : sites) {
-				int[] permitOrig = orig.getPermittedModes();
-				ArrayList<Double> vt = new ArrayList<Double>();
-				ArrayList<Double> vd = new ArrayList<Double>();
-				ArrayList<Double> bt = new ArrayList<Double>();
-				ArrayList<Double> bd = new ArrayList<Double>();
-				ArrayList<Double> dt = new ArrayList<Double>();
-				ArrayList<Double> dd = new ArrayList<Double>();
-				if (!vanRPs.containsKey(orig)) {
-					vanRPs.put(orig, new HashMap<Surgery, ResponsePath>());
-				}
-				if (!bikeRPs.containsKey(orig)) {
-					bikeRPs.put(orig, new HashMap<Surgery, ResponsePath>());
-				}
-				for (Surgery dest : sites) {
-					int[] permitDest = dest.getPermittedModes();
+		// https://www.gov.uk/government/statistical-data-sets/road-traffic-statistics-tra#annual-daily-traffic-flow-and-distribution-tra03
+		// tra0307
+		createMatrixFiles(sites, runID, startHour);
+		for (int o = 0; o < sites.size(); o++) {
+			Surgery orig = sites.get(o);
+			int[] permitOrig = orig.getPermittedModes();
+			// [van time, dist, bike time, dist, drone time, dist][hour][dest]
+			double[][][] values = new double[6][4][sites.size()];
+			for (int hr = startHour; hr < startHour + 4; hr++) {
+				Arrays.fill(values[0][hr - startHour], -1.0);
+				Arrays.fill(values[1][hr - startHour], -1.0);
+				Arrays.fill(values[2][hr - startHour], -1.0);
+				Arrays.fill(values[3][hr - startHour], -1.0);
+				Arrays.fill(values[4][hr - startHour], -1.0);
+				Arrays.fill(values[5][hr - startHour], -1.0);
+			}
+			for (int d = 0; d < sites.size(); d++) {
+				Surgery dest = sites.get(d);
+				int[] permitDest = dest.getPermittedModes();
+				ResponsePath van = getGH(orig, dest, graphHopperCar, "car");
+				ResponsePath bike = getGH(orig, dest, graphHopperBike, "racingbike");
+
+				for (int hr = startHour; hr < startHour + 4; hr++) {
 					if (orig.equals(dest)) {
-						vt.add(0.0);
-						vd.add(0.0);
-						bt.add(0.0);
-						bd.add(0.0);
-						dt.add(0.0);
-						dd.add(0.0);
+						values[0][hr - startHour][d] = 0.0;
+						values[1][hr - startHour][d] = 0.0;
+						values[2][hr - startHour][d] = 0.0;
+						values[3][hr - startHour][d] = 0.0;
+						values[4][hr - startHour][d] = 0.0;
+						values[5][hr - startHour][d] = 0.0;
 					} else {
-						ResponsePath van = null;
-						HashMap<Surgery, ResponsePath> rpVan = vanRPs.get(orig);
-						if (rpVan.containsKey(dest)) {
-							van = rpVan.get(dest);
-						} else {
-							van = getGH(orig, dest, graphHopperCar, "car");
-							rpVan.put(dest, van);
-						}
-
-						ResponsePath bike = null;
-						HashMap<Surgery, ResponsePath> rpBike = bikeRPs.get(orig);
-						if (rpBike.containsKey(dest)) {
-							bike = rpBike.get(dest);
-						} else {
-							bike = getGH(orig, dest, graphHopperBike, "racingbike");
-							rpBike.put(dest, van);
-						}
-
-						double vanDist = -1;
-						double vanTime = -1;
-						double bikeDist = -1;
-						double bikeTime = -1;
-						double droneDist = -1;
-						double droneTime = -1;
 						if ((permitOrig[0] == 1 || orig.equals(sites.get(0)))
 								&& (permitDest[0] == 1 || dest.equals(sites.get(0)))) {
-							vanDist = van.getDistance() / 1000.0;//in km
-							vanTime = van.getTime() / 60000.0;//in mins
-							//penalty varied with time of day, and by site
+							values[1][hr - startHour][d] = MathUtils.round(van.getDistance() / 1000.0, 3);// in km
+							double dist = van.getTime() / 60000.0;// in mins
+							// penalty varied with time of day, and by site
 							double trafficPenaltyFactor = rand.nextGaussian() * trafficSDev[hr] + trafficMean[hr];
-							vanTime = vanTime + vanTime * trafficPenaltyFactor;
+							values[0][hr - startHour][d] = MathUtils.round(dist + dist * trafficPenaltyFactor, 3);
 						}
 						if ((permitOrig[1] == 1 || orig.equals(sites.get(0)))
 								&& (permitDest[1] == 1 || dest.equals(sites.get(0)))) {
-							bikeDist = bike.getDistance() / 1000.0;//in km
-							bikeTime = bike.getTime() / 60000.0;//in mins
+							values[3][hr - startHour][d] = MathUtils.round(bike.getDistance() / 1000.0, 3);// in km
+							values[2][hr - startHour][d] = MathUtils.round(bike.getTime() / 60000.0, 3);// in mins
 						}
 						if ((permitOrig[2] == 1 || orig.equals(sites.get(0)))
 								&& (permitDest[2] == 1 || dest.equals(sites.get(0)))) {
-							droneDist = geoDesDistance(orig, dest);//varies with time of day (assumed random)
+							double geoDist = geoDesDistance(orig, dest);// varies with time of day (assumed random)
 							double droneCirc = rand.nextGaussian() * circSDev + circMean;
-							droneDist = droneDist * droneCirc;
-							droneTime = droneDist / (droneSpeed / 60);
+							double actualDist = geoDist * droneCirc;
+							values[5][hr - startHour][d] = MathUtils.round(actualDist, 3);
+							values[4][hr - startHour][d] = MathUtils.round(actualDist / (droneSpeed / 60), 3);
 						}
-						vt.add(vanTime);
-						vd.add(vanDist);
-						bt.add(bikeTime);
-						bd.add(bikeDist);
-						dt.add(droneTime);
-						dd.add(droneDist);
 					}
 				}
-				vanTimes.add(vt);
-				vanDists.add(vd);
-				bikeTimes.add(bt);
-				bikeDists.add(bd);
-				droneTimes.add(dt);
-				droneDists.add(dd);
 			}
+			writeToMatrixFile(values, orig, startHour, runID);
+			System.out.println("All times/distances for site " + (o + 1) + "/" + sites.size() + " written.");
+		}
+	}
 
+	private static void writeToMatrixFile(double[][][] values, Surgery origin, int startHour, String runID) {
+
+		for (int hr = startHour; hr < startHour + 4; hr++) {
 			String zero = "";
 			if (hr < 10) {
 				zero = "0";
 			}
+			String[] paths = new String[6];
+			paths[0] = runID + "//" + zero + hr + "00hr" + "-vanTimes";
+			paths[1] = runID + "//" + zero + hr + "00hr" + "-vanDists";
+			paths[2] = runID + "//" + zero + hr + "00hr" + "-bikeTimes";
+			paths[3] = runID + "//" + zero + hr + "00hr" + "-bikeDists";
+			paths[4] = runID + "//" + zero + hr + "00hr" + "-droneTimes";
+			paths[5] = runID + "//" + zero + hr + "00hr" + "-droneDists";
 
-			try {
-				writeMatrixToFile(vanTimes, sites, runID + "//" + zero + hr + "00hr" + "-vanTimes");
-				writeMatrixToFile(vanDists, sites, runID + "//" + zero + hr + "00hr" + "-vanDists");
-				writeMatrixToFile(bikeTimes, sites, runID + "//" + zero + hr + "00hr" + "-bikeTimes");
-				writeMatrixToFile(bikeDists, sites, runID + "//" + zero + hr + "00hr" + "-bikeDists");
-				writeMatrixToFile(droneTimes, sites, runID + "//" + zero + hr + "00hr" + "-droneTimes");
-				writeMatrixToFile(droneDists, sites, runID + "//" + zero + hr + "00hr" + "-droneDists");
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			for (int i = 0; i < paths.length; i++) {
+				try {
+					FileWriter write = new FileWriter(paths[i] + ".txt", true);
+					PrintWriter printLine = new PrintWriter(write);
+					printLine.print("\n");
+					printLine.print(origin.getPostcode());
+					double[] data = values[i][hr - startHour];
+					for (int d = 0; d < data.length; d++) {
+						printLine.print("\t");
+						printLine.print(data[d]);
+					}
+					printLine.close();
+				} catch (IOException e) {
+					System.out.println(e);
+				}
 			}
 		}
 	}
 
-	private static ResponsePath getGH(Surgery a, Surgery b, GraphHopper gh, String profile) {
+	private static void createMatrixFiles(ArrayList<Surgery> sites, String runID, int startHour) {
+
+		for (int hr = startHour; hr < startHour + 4; hr++) {
+			String zero = "";
+			if (hr < 10) {
+				zero = "0";
+			}
+			String[] paths = new String[6];
+			paths[0] = runID + "//" + zero + hr + "00hr" + "-vanTimes";
+			paths[1] = runID + "//" + zero + hr + "00hr" + "-vanDists";
+			paths[2] = runID + "//" + zero + hr + "00hr" + "-bikeTimes";
+			paths[3] = runID + "//" + zero + hr + "00hr" + "-bikeDists";
+			paths[4] = runID + "//" + zero + hr + "00hr" + "-droneTimes";
+			paths[5] = runID + "//" + zero + hr + "00hr" + "-droneDists";
+			for (int i = 0; i < paths.length; i++) {
+				try {
+					FileWriter write = new FileWriter(paths[i] + ".txt", false);
+					PrintWriter printLine = new PrintWriter(write);
+					printLine.print("\t");
+					for (Surgery s : sites) {
+						printLine.print(s.getPostcode());
+						printLine.print("\t");
+					}
+					printLine.close();
+				} catch (IOException e) {
+					System.out.println(e);
+				}
+			}
+		}
+	}
+
+	private static ResponsePath getGH(Surgery a, Surgery b, GraphHopper gh, String profile)
+			throws java.lang.OutOfMemoryError {
 
 		GHRequest request = new GHRequest(a.getCoord().getY(), a.getCoord().getX(), b.getCoord().getY(),
 				b.getCoord().getX()).setProfile("vehicle");
@@ -163,8 +185,9 @@ public class Matrix {
 		return route.getBest();
 	}
 
-	//writing of matrix files. Input of nested arraylist of doubles. Writes to tab separated text file
-	private static void writeMatrixToFile(ArrayList<ArrayList<Double>> matrix, ArrayList<Surgery> sites, String path)
+	// writing of matrix files. Input of nested arraylist of doubles. Writes to tab
+	// separated text file
+	private static void writeMatrixToFile(double[][] matrix, ArrayList<Surgery> sites, String path)
 			throws IOException {
 
 		FileWriter write = new FileWriter(path + ".txt", false);
@@ -177,11 +200,11 @@ public class Matrix {
 		printLine.print("\n");
 
 		int i = 0;
-		for (ArrayList<Double> row : matrix) {
+		for (int a = 0; a < sites.size(); a++) {
 			printLine.print(sites.get(i).getCoord().getY() + "," + sites.get(i).getCoord().getX());
 			printLine.print("\t");
-			for (Double weight : row) {
-				printLine.print(weight);
+			for (int b = 0; b < sites.size(); b++) {
+				printLine.print(matrix[a][b]);
 				printLine.print("\t");
 			}
 			printLine.print("\n");
@@ -194,7 +217,7 @@ public class Matrix {
 
 		GeodesicData g = Geodesic.WGS84.Inverse(a.getCoord().getY(), a.getCoord().getX(), b.getCoord().getY(),
 				b.getCoord().getX(), GeodesicMask.DISTANCE);
-		//distance in km
+		// distance in km
 		Double distance = (g.s12 / 1000);
 		return distance;
 	}

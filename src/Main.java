@@ -35,7 +35,9 @@ public class Main {
 
 	private static String filePath;
 
-	private static int n;
+	private static int nMin;
+	private static int nMax;
+	private static int nInc;
 
 	private static double minLat;
 	private static double minLon;
@@ -60,39 +62,55 @@ public class Main {
 		filePath = jarPath.getParentFile().getAbsolutePath();
 		filePath = filePath.replace("%20", " ");
 
-		//readSettings
+		// readSettings
+		System.out.println("Reading settings...");
 		readSettings();
-		//readTraffic
+		// readTraffic
+		System.out.println("Reading traffic data...");
 		readTraffic();
-		//read input
+		// read input
+		System.out.println("Reading postcode input...");
 		readInput();
-		//assign site properties - drone/cVans
+		// assign site properties - drone/cVans
+		System.out.println("Assigning site characteristics...");
 		assignModality();
+		System.out.println("Setting up GrahHopper...");
+		Matrix.setUpGH(filePath);
 
-		//instances are all 4 hours
-		//0-4 with delivery point/first site at centroid
-		//5-9 with random delivery point
-		//driving time is free flow plus fudge based on DfT traffic flow data (assuming free flow up to 125% of average flow)
-		//cycling time is free flow
-		//drone distance is based on a gaussian distribution (params on input), times are based on avg grounds speed
+		// instances are all 4 hours
+		// 0-4 with delivery point/first site at centroid
+		// 5-9 with random delivery point
+		// driving time is free flow plus fudge based on DfT traffic flow data (assuming
+		// free flow up to 125% of average flow)
+		// cycling time is free flow
+		// drone distance is based on a gaussian distribution (params on input), times
+		// are based on avg grounds speed
 
 		boolean centroid = true;
-		for (int i = 0; i < 10; i++) {
+		for (int size = nMin; size < nMax; size += nInc) {
+			System.out.println("Running for " + size + " sites... ");
+			for (int i = 0; i < 10; i++) {
+				System.out.println("Case " + (i + 1) + " of 10... ");
 
-			if (i > 5) {
-				centroid = false;
-			}
-			ArrayList<Surgery> instance = selectSites(centroid);
-			String runPath = filePath + "//output//" + instance.size() + "-" + i;
-			new File(runPath).mkdirs();
-			//generate matrices & write
-			Matrix.getMatrices(instance, droneSpd, circMean, circSDev, filePath, runPath, startTime, trafficMean,
-					trafficSDev);
-			//write case to file
-			try {
-				writeToFile(instance, runPath + "//" + instance.size() + "-" + i, centroid);
-			} catch (IOException e) {
-				e.printStackTrace();
+				if (i > 5) {
+					centroid = false;
+				}
+				System.out.print("Selecting sites... ");
+				ArrayList<Surgery> instance = selectSites(size, centroid);
+				String runPath = filePath + "//output//" + instance.size() + "-" + i;
+				new File(runPath).mkdirs();
+				// generate matrices & write
+				System.out.print("Compiling matrices... ");
+				Matrix.getMatrices(instance, droneSpd, circMean, circSDev, runPath, startTime, trafficMean,
+						trafficSDev);
+				// write case to file
+				System.out.print("Writing output... ");
+				try {
+					writeToFile(instance, runPath + "//" + instance.size() + "-" + i, centroid);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				System.out.println("Done!");
 			}
 		}
 	}
@@ -119,7 +137,9 @@ public class Main {
 			minLon = Double.valueOf(br.readLine().split("=")[1]);
 			maxLat = Double.valueOf(br.readLine().split("=")[1]);
 			maxLon = Double.valueOf(br.readLine().split("=")[1]);
-			n = Integer.valueOf(br.readLine().split("=")[1]);
+			nMin = Integer.valueOf(br.readLine().split("=")[1]);
+			nMax = Integer.valueOf(br.readLine().split("=")[1]) + 1;
+			nInc = Integer.valueOf(br.readLine().split("=")[1]);
 			startTime = Integer.valueOf(br.readLine().split("=")[1]);
 			droneSpd = Double.valueOf(br.readLine().split("=")[1]);
 			droneMean = Double.valueOf(br.readLine().split("=")[1]);
@@ -151,7 +171,7 @@ public class Main {
 					if (lat < maxLat && lat > minLat && lon < maxLon && lon > minLon) {
 						Surgery s = new Surgery("Surgery" + count, lineSplit[0], new Point2D.Double(lon, lat));
 						s.setModesPermitted(1, 1, 1, 0);
-						//avg site bits
+						// avg site bits
 						sumLat += lat;
 						sumLon += lon;
 						toVisit.add(s);
@@ -170,24 +190,25 @@ public class Main {
 		target.setModesPermitted(1, 1, 1, 0);
 	}
 
-	private static ArrayList<Surgery> selectSites(boolean centroid) {
+	private static ArrayList<Surgery> selectSites(int size, boolean centroid) {
 		ArrayList<Surgery> shuffled = new ArrayList<Surgery>(toVisit);
 		Collections.shuffle(shuffled, rand);
 
 		ArrayList<Surgery> toUse = new ArrayList<Surgery>();
 		if (centroid == true) {
 			toUse.add(target);
-			toUse.addAll(shuffled.subList(0, n - 1));
+			toUse.addAll(shuffled.subList(0, size - 1));
 		} else {
-			toUse.addAll(shuffled.subList(0, n));
+			toUse.addAll(shuffled.subList(0, size));
 		}
 		return toUse;
 	}
 
 	private static void assignModality() {
-		//set modes permitted. Vans allowed everywhere, bikes allowed but will be limited by distance? (alt: use point density?)
-		//drones permitted based on probability
-		//mean = 0.0823, sd = 0.0306
+		// set modes permitted. Vans allowed everywhere, bikes allowed but will be
+		// limited by distance? (alt: use point density?)
+		// drones permitted based on probability
+		// mean = 0.0823, sd = 0.0306
 		double droneProb = rand.nextGaussian() * droneSDev + droneMean;
 		int droneUnsuitable = (int) Math.round(toVisit.size() * (1 - droneProb));
 		int cVanSuitable = (int) Math.round(toVisit.size() * cVanProb);
@@ -222,30 +243,38 @@ public class Main {
 		printLine.print("\n");
 		printLine.print(String.valueOf(toVisit.size()));
 		printLine.print("\n");
-		//printLine.print("Instance Size:");
-		//printLine.print("\n");
-		//printLine.print(String.valueOf(n));
-		//printLine.print("\n");
+		// printLine.print("Instance Size:");
+		// printLine.print("\n");
+		// printLine.print(String.valueOf(n));
+		// printLine.print("\n");
 		printLine.print("*");
 		printLine.print("\n");
 		printLine.print(
 				"Site/Postcode" + t + "Lat" + t + "Lon" + t + "Van" + t + "Bike" + t + "Drone" + t + "C-Van Base");
 		printLine.print("\n");
-		printLine.print("Mean/Target" + t + target.getCoord().getY() + t + target.getCoord().getX() + t + 1 + t + 1 + t
-				+ 1 + t + 0);
-		printLine.print("\n");
+		if (centroid == true) {
+			printLine.print("Target" + t + target.getCoord().getY() + t + target.getCoord().getX() + t + 1 + t + 1 + t
+					+ 1 + t + 0);
+			printLine.print("\n");
+		} else {
+			Surgery s = chosen.get(0);
+			printLine.print("Target:" + s.getPostcode() + t + s.getCoord().getY() + t + s.getCoord().getX() + t + 1 + t
+					+ 1 + t + 1 + t + 0);
+			printLine.print("\n");
+		}
 
 		printLine2.print(
 				"Site/Postcode" + t + "Lat" + t + "Lon" + t + "Van" + t + "Bike" + t + "Drone" + t + "C-Van Base");
 		printLine2.print("\n");
 
 		if (centroid == true) {
-			printLine2.print("Mean/Target" + t + target.getCoord().getY() + t + target.getCoord().getX() + t + 1 + t + 1
+			printLine2.print("Target" + t + target.getCoord().getY() + t + target.getCoord().getX() + t + 1 + t + 1
 					+ t + 1 + t + 0);
 			printLine2.print("\n");
 		} else {
 			Surgery s = chosen.get(0);
-			printLine2.print(s.getPostcode() + t + s.getCoord().getY() + t + s.getCoord().getX() + t + 1 + t + 1 + t + 1
+			printLine2.print("Target:" + s.getPostcode() + t + s.getCoord().getY() + t + s.getCoord().getX() + t + 1 + t
+					+ 1 + t + 1
 					+ t + 0);
 			printLine2.print("\n");
 		}
