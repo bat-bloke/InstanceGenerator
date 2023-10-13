@@ -37,10 +37,12 @@ public class Matrix {
 
 		graphHopperBike = new GraphHopper().setGraphHopperLocation(bikeLocation).setOSMFile(mapSource)
 				.setProfiles(new Profile("vehicle").setVehicle("racingbike").setWeighting("fastest").setTurnCosts(true))
-				.setMinNetworkSize(200).importOrLoad();
+				.setMinNetworkSize(200)
+				.importOrLoad();
 		graphHopperCar = new GraphHopper().setGraphHopperLocation(carLocation).setOSMFile(mapSource)
 				.setProfiles(new Profile("vehicle").setVehicle("car").setWeighting("fastest").setTurnCosts(true))
-				.setMinNetworkSize(200).importOrLoad();
+				.setMinNetworkSize(200)
+				.importOrLoad();
 	}
 
 	public static void getMatrices(ArrayList<Surgery> sites, double droneSpeed, double circMean, double circSDev,
@@ -83,10 +85,10 @@ public class Matrix {
 						if ((permitOrig[0] == 1 || orig.equals(sites.get(0)))
 								&& (permitDest[0] == 1 || dest.equals(sites.get(0)))) {
 							values[1][hr - startHour][d] = MathUtils.round(van.getDistance() / 1000.0, 3);// in km
-							double time = van.getTime() / 60000.0;// in mins
+							double dist = van.getTime() / 60000.0;// in mins
 							// penalty varied with time of day, and by site
 							double trafficPenaltyFactor = rand.nextGaussian() * trafficSDev[hr] + trafficMean[hr];
-							values[0][hr - startHour][d] = MathUtils.round(time + time * trafficPenaltyFactor, 3);
+							values[0][hr - startHour][d] = MathUtils.round(dist + dist * trafficPenaltyFactor, 3);
 						}
 						if ((permitOrig[1] == 1 || orig.equals(sites.get(0)))
 								&& (permitDest[1] == 1 || dest.equals(sites.get(0)))) {
@@ -185,7 +187,8 @@ public class Matrix {
 
 	// writing of matrix files. Input of nested arraylist of doubles. Writes to tab
 	// separated text file
-	private static void writeMatrixToFile(double[][] matrix, ArrayList<Surgery> sites, String path) throws IOException {
+	private static void writeMatrixToFile(double[][] matrix, ArrayList<Surgery> sites, String path)
+			throws IOException {
 
 		FileWriter write = new FileWriter(path + ".txt", false);
 		PrintWriter printLine = new PrintWriter(write);
